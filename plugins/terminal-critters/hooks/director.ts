@@ -15,6 +15,9 @@ const MUSE_MS = 7000
 /** A subagent counts as busy this long after its last tool call. */
 const HELPER_MS = 25000
 
+/** At most this many helper critters, however many agents are busy. */
+export const MAX_HELPERS = 5
+
 const BUBBLE_TEXT = 0xf6ebe3
 const BUBBLE_FILL = 0x2a1714
 const BUBBLE_EDGE = 0xd6c2b5
@@ -102,11 +105,16 @@ export class Director {
     }
     this.scene.draw(c, f)
     const pose = this.scene.pose?.(c, f) ?? pace(c, f, c.h - CRITTER_HEIGHT - 1)
-    // Helpers trail behind the critter, a few pixels apart, bobbing out of step.
-    for (let i = 0; i < Math.min(f.helpers, 4); i++) {
-      const behind = (pose.flip ? 1 : -1) * (10 + i * 9)
+    // One helper per busy agent (up to MAX_HELPERS) trails behind the critter,
+    // a few pixels apart, bobbing out of step. One that would leave the
+    // screen walks ahead instead.
+    const left = (i: number) => pose.x - 9 - i * 8
+    const right = (i: number) => pose.x + CRITTER_WIDTH + 3 + i * 8
+    for (let i = 0; i < Math.min(f.helpers, MAX_HELPERS); i++) {
+      const trail = pose.flip ? right(i) : left(i)
+      const x = trail >= 0 && trail + 6 <= c.w ? trail : pose.flip ? left(i) : right(i)
       const bob = Math.round(Math.sin(f.t * 8 + i * 1.7))
-      drawHelper(c, pose.x + (pose.flip ? CRITTER_WIDTH : 0) + behind, pose.y + CRITTER_HEIGHT - 4, pose.flip, bob)
+      drawHelper(c, x, pose.y + CRITTER_HEIGHT - 4, pose.flip, bob)
     }
     // A quick blink every few seconds.
     c.clearText(pose.x, pose.y, CRITTER_WIDTH, CRITTER_HEIGHT)

@@ -66,6 +66,24 @@ describe('director', () => {
     expect(d.saying()).toContain('second.ts')
   })
 
+  test('helpers grow with busy agents but stop at five', async () => {
+    const helperPixels = (agents: number) => {
+      const d = new Director(SCENES[0]!, 0)
+      d.setBusyAgents(agents)
+      const c = d.canvas(160, 8, 1000)
+      // Helper eyes sit in the body color; count body-colored pixels.
+      let n = 0
+      for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (c.get(x, y) === 0xd97757) n++
+      return n
+    }
+    const base = helperPixels(0)
+    const one = helperPixels(1) - base
+    expect(one).toBeGreaterThan(0)
+    expect(helperPixels(3) - base).toBe(one * 3)
+    expect(helperPixels(5) - base).toBe(one * 5)
+    expect(helperPixels(9)).toBe(helperPixels(5))
+  })
+
   test('a subagent call adds a helper and is not narrated', async () => {
     const d = new Director(SCENES[0]!, 0)
     const before = d.saying()
