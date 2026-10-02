@@ -14,7 +14,7 @@ A little pixel critter that keeps you company in [Claude Code](https://code.clau
 
 - **It reacts to real work.** Each tool call shows up in the scene: a file Claude reads becomes a sign in the meadow, a command becomes a crate on the factory belt, a search pattern drifts through space.
 - **It brings friends.** When subagents are busy, small helper critters tag along.
-- **It stays out of the way.** It draws only while a turn is running, only in the terminal, and stops its timer when Claude is idle.
+- **It stays out of the way.** It draws only while Claude or one of its background agents is working, only in the terminal, and stops its timer when Claude is idle.
 - **It touches nothing.** No file access, no network, no processes, no model calls. Run `claude plugin validate plugins/terminal-critters` and see for yourself.
 
 > Requires Claude Code **v2.1.287 or later** (the first version with [mods](https://code.claude.com/docs/en/plugins/mods/overview)). Works in the terminal; the Desktop app and VS Code panel don't draw it.

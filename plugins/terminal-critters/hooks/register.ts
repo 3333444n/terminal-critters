@@ -52,6 +52,27 @@ const show = {
   denials: 0,
   previewUntil: 0,
   working: false,
+  /** Agents Claude Code lists as running (background agents keep the show on). */
+  agents: 0,
+  frames: 0,
+}
+
+/** Agent statuses that count as still working. */
+const BUSY = new Set(['running', 'pending'])
+/** How often, in frames, the timer re-counts running agents while the main loop is idle. */
+const AGENT_POLL_FRAMES = 15
+
+/** Counts the agents still running, and tells the director. */
+async function countAgents($: Engine): Promise<number> {
+  const list = await $.agent.list()
+  show.agents = list.filter(a => BUSY.has(a.status)).length
+  show.director?.setBusyAgents(show.agents)
+  return show.agents
+}
+
+/** True while there is work to keep the critter company. */
+function busy(): boolean {
+  return show.working || show.agents > 0
 }
 
 function now(): number {
@@ -83,8 +104,17 @@ function ensureTimer($: Engine): void {
       if (++show.idle > IDLE_FRAMES) stopTimer()
       return
     }
-    // A preview that ran out while idle: redraw so the band goes away.
-    if (!show.working && !previewing()) {
+    // The main loop is idle but agents may still run: re-count now and then,
+    // and redraw once the last one (and any preview) is done so the band goes away.
+    if (!show.working && ++show.frames % AGENT_POLL_FRAMES === 0) {
+      void countAgents($).then(n => {
+        if (n === 0 && !show.working && !previewing()) {
+          show.band = undefined
+          $.ui.invalidate('ui.render')
+        }
+      })
+    }
+    if (!busy() && !previewing()) {
       show.band = undefined
       $.ui.invalidate('ui.render')
       return
@@ -129,13 +159,19 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
-    show.director?.happen(kindOf(e.tool), labelOf(e as unknown as Record<string, unknown>), now(), e.agentId)
+    if (!show.director) startShow()
+    // While the main loop is idle, the critter narrates what the agents do.
+    const narrate = !e.agentId || !show.working
+    show.director?.happen(kindOf(e.tool), labelOf(e as unknown as Record<string, unknown>), now(), e.agentId, narrate)
+    // An agent working while the band is hidden: draw it again.
+    if (e.agentId && !show.band && !show.paused) $.ui.invalidate('ui.render')
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     show.working = e.props.isWorking
-    const visible = (show.working && !show.paused) || previewing()
+    if (!show.working) await countAgents($)
+    const visible = (busy() && !show.paused) || previewing()
     if (!visible || e.props.hasSurvey || e.surface !== 'terminal' || e.props.maxRows < MIN_ROWS + 1) {
       show.band = undefined
       return next(e)

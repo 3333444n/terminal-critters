@@ -113,6 +113,7 @@ describe('the band', () => {
 
   test('stays out of the way when idle, on desktop, or switched off', async ($, on) => {
     mock.store(on)
+    on('agent.list', async () => ({ value: [] }))
     on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
 
     const idle = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(false) })
@@ -135,7 +136,24 @@ describe('the band', () => {
     await back.unmount()
   })
 
+  test('stays up while a background agent runs after the main turn ends', async ($, on) => {
+    mock.store(on)
+    let agents = [{ id: 'a1', description: 'Research', type: 'general-purpose', status: 'running' }]
+    on('agent.list', async () => ({ value: agents }))
+    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
+
+    const busy = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(false) })
+    expect(await busy.find({ type: 'Raster', key: 'scene' })).toBeDefined()
+    await busy.unmount()
+
+    agents = [{ id: 'a1', description: 'Research', type: 'general-purpose', status: 'completed' }]
+    const done = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(false) })
+    expect(await done.find({ type: 'Raster' })).toBeUndefined()
+    await done.unmount()
+  })
+
   test('a tiny band is left alone', async ($, on) => {
+    on('agent.list', async () => ({ value: [] }))
     on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true, 100, 3) })
     expect(await ui.find({ type: 'Raster' })).toBeUndefined()

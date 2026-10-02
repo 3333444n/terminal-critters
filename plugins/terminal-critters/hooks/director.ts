@@ -30,6 +30,7 @@ export class Director {
   private said: Said
   private pending: Seen | undefined
   private helpers = new Map<string, number>()
+  private busyAgents = 0
   private counter = 0
 
   constructor(scene: Scene, now: number) {
@@ -44,13 +45,21 @@ export class Director {
     this.startedAt = now
   }
 
-  /** A tool call happened. `agentId` is set when a subagent made it. */
-  happen(kind: WorkKind, label: string, now: number, agentId?: string): void {
+  /** How many agents Claude Code reports as running right now. */
+  setBusyAgents(n: number): void {
+    this.busyAgents = n
+  }
+
+  /**
+   * A tool call happened. `agentId` is set when a subagent made it; its calls
+   * are narrated only with `narrate` (when the main loop is idle).
+   */
+  happen(kind: WorkKind, label: string, now: number, agentId?: string, narrate = !agentId): void {
     if (agentId) this.helpers.set(agentId, now)
     const seen: Seen = { kind, label, at: now, seed: this.counter++ }
     this.seen = [seen, ...this.seen].slice(0, 6)
-    // A subagent's calls make helpers busy; only the main loop's are narrated.
-    if (agentId) return
+    // A subagent's calls make helpers busy; the main loop's are narrated.
+    if (!narrate) return
     if (now - this.said.at >= HOLD_MS || this.said.kind === 'think') this.say(seen, now)
     else this.pending = seen
   }
@@ -89,7 +98,7 @@ export class Director {
       happenings: this.seen.map(
         (s): Happening => ({ kind: s.kind, label: s.label, age: (now - s.at) / 1000, seed: s.seed }),
       ),
-      helpers: this.helpers.size,
+      helpers: Math.max(this.helpers.size, this.busyAgents),
     }
     this.scene.draw(c, f)
     const pose = this.scene.pose?.(c, f) ?? pace(c, f, c.h - CRITTER_HEIGHT - 1)
