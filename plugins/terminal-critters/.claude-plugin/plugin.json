@@ -1,6 +1,6 @@
 {
   "name": "terminal-critters",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A pixel critter and its little worlds, animated above the prompt while Claude works",
   "author": { "name": "3333444n" },
   "license": "MIT",
