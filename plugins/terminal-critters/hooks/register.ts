@@ -52,6 +52,8 @@ const show = {
   denials: 0,
   previewUntil: 0,
   working: false,
+  /** True between the main loop's turn.start and its turn.complete. */
+  turnOpen: false,
   /** Agents Claude Code lists as running (background agents keep the show on). */
   agents: 0,
   frames: 0,
@@ -147,14 +149,19 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
-    // A turn already running (a subagent's) keeps the current show.
-    if (!show.working) startShow()
+    // New work, new scene. A turn starting while one is open (a subagent's)
+    // keeps the current show.
+    if (!show.turnOpen) startShow()
+    show.turnOpen = true
     show.working = true
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (!e.agentId) show.working = false
+    if (!e.agentId) {
+      show.turnOpen = false
+      show.working = false
+    }
     return next(e)
   })
 
@@ -237,7 +244,8 @@ export const register: Register = on => {
       ensureTimer($)
       return { text: `Previewing ${scene.name} for ${PREVIEW_MS / 1000} seconds.` }
     }
-    return { text: `${HELP}\n\nStatus: ${show.paused ? 'off' : 'on'}, scene ${show.pinned}.` }
+    const current = show.director ? `, last shown ${show.director.scene.name}` : ''
+    return { text: `${HELP}\n\nStatus: ${show.paused ? 'off' : 'on'}, scene ${show.pinned}${current}.` }
   })
 
   on('session.end', async ($, e, next) => {

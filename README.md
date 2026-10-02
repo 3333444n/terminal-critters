@@ -2,15 +2,7 @@
 
 A little pixel critter that keeps you company in [Claude Code](https://code.claude.com) while Claude works: a fan-made homage to Claude's orange mascot. Every turn it shows up in a small animated world above your prompt (an asteroid field, a deep dive, a meadow, a dungeon, a factory), reacts to what Claude is doing, and comments in a speech bubble:
 
-```
-✶ Vibing… (42s · ↓ 1.8k tokens)
-              ╭──────────────────────────────╮       ✦         ·
-   *          │ Pulling the npm test lever.  │   }o{ register.ts
-       ·      ╰──────────────────────────────╯           ▄▄▄
-                       ▄██████████▄                     █████
-                     ▀███▀██████▀███▀         *        ███████
-                       ▀█▀ ▀█  █▀ ▀█▀                    ▀▀▀
-```
+![The critter and a helper walking through the meadow scene while a background agent works](docs/demo.gif)
 
 - **It reacts to real work.** Each tool call shows up in the scene: a file Claude reads becomes a sign in the meadow, a command becomes a crate on the factory belt, a search pattern drifts through space.
 - **It brings friends.** Every busy agent gets a small helper critter tagging along, up to five.

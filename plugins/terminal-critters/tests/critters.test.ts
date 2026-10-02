@@ -178,6 +178,30 @@ describe('the band', () => {
     await ui.unmount()
   })
 
+  test('every new turn starts a different scene', async ($, on) => {
+    mock.store(on)
+    on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+    on('turn.complete', async () => ({ text: '' }))
+    const shown = async () => {
+      const text = JSON.stringify(await $.command.run({ command: 'critters', args: '' }))
+      return /last shown ([A-Za-z ]+)\./.exec(text)?.[1]
+    }
+    const seen: (string | undefined)[] = []
+    on('agent.list', async () => ({ value: [] }))
+    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
+    for (const turnId of ['t1', 't2', 't3']) {
+      // The band redraws as working before turn.start arrives, as in a session.
+      const band = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
+      await band.unmount()
+      await $.turn.start({ text: 'do work', turnId })
+      seen.push(await shown())
+      await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId } as never)
+    }
+    expect(seen.every(Boolean)).toBe(true)
+    expect(seen[1]).not.toBe(seen[0])
+    expect(seen[2]).not.toBe(seen[1])
+  })
+
   test('/critters answers list, scene and unknown names', async ($, on) => {
     mock.store(on)
     const list = JSON.stringify(await $.command.run({ command: 'critters', args: 'list' }))
