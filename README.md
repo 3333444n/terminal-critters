@@ -6,6 +6,7 @@ A little pixel critter that keeps you company in [Claude Code](https://code.clau
 
 - **It reacts to real work.** Each tool call shows up in the scene: a file Claude reads becomes a sign in the meadow, a command becomes a crate on the factory belt, a search pattern drifts through space.
 - **It brings friends.** Every busy agent gets a small helper critter tagging along, up to five.
+- **Each session has its own world.** A session keeps one scene for its whole life, resumes included, and sessions opened side by side get different ones, so you can tell your terminals apart at a glance.
 - **It stays out of the way.** It draws only while Claude or one of its background agents is working, only in the terminal, and stops its timer when Claude is idle.
 - **It touches nothing.** No file access, no network, no processes, no model calls. Run `claude plugin validate plugins/terminal-critters` and see for yourself.
 
@@ -51,8 +52,8 @@ After disabling or uninstalling from your shell, run `/reload-plugins` in any op
 | `/critters` | Help and current status |
 | `/critters off` / `/critters on` | Switch the critters off or on. Remembered across sessions. |
 | `/critters list` | List the scenes |
-| `/critters scene <name>` | Always use one scene. `/critters scene auto` rotates again (the default). |
-| `/critters next` | Switch to another scene right now |
+| `/critters scene <name>` | Always use one scene, in every session. `/critters scene auto` goes back to one scene per session (the default). |
+| `/critters next` | Give this session another scene (it keeps it) |
 | `/critters preview [name]` | Show a scene for 12 seconds, even while Claude is idle |
 
 All of them work while Claude is mid-turn.

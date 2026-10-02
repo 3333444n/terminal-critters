@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import { Canvas } from '../hooks/canvas'
 import { wrap } from '../hooks/captions'
 import { Director } from '../hooks/director'
-import { SCENES } from '../hooks/scenes/index'
+import { SCENES, freshScene } from '../hooks/scenes/index'
 import { kindOf, labelOf } from '../hooks/work'
 
 const PLUGIN = 'terminal-critters'
@@ -47,6 +47,19 @@ describe('scenes', () => {
     const ids = SCENES.map(s => s.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const id of ids) expect(/^[a-z][a-z0-9-]*$/.test(id)).toBe(true)
+  })
+})
+
+describe('session scenes', () => {
+  test('a new session gets a scene recent sessions used least', async () => {
+    const ids = SCENES.map(s => s.id)
+    expect(freshScene(ids.slice(0, -1)).id).toBe(ids.at(-1))
+    // All used once: the one used longest ago.
+    expect(freshScene([...ids.slice(1), ids[0]!]).id).toBe(ids[1])
+    // Five sessions in a row from nothing all differ.
+    const picked: string[] = []
+    for (let i = 0; i < SCENES.length; i++) picked.push(freshScene(picked).id)
+    expect(new Set(picked).size).toBe(SCENES.length)
   })
 })
 
@@ -194,6 +207,70 @@ describe('the band', () => {
     await done.unmount()
   })
 
+  test('keeps moving after its timer was cut off while away', async ($, on) => {
+    mock.store(on)
+    on('agent.list', async () => ({ value: [] }))
+    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
+    // A clock whose periods resolve when the test ticks it, or are refused.
+    let refuse = false
+    let due: ((answer: object) => void)[] = []
+    on('clock.every', async ($$, e, next) => new Promise<object>(resolve => {
+      due.push(resolve)
+      next.signal.addEventListener('abort', () => resolve({ deny: 'cancelled' }))
+    }))
+    const tick = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const now = due
+        due = []
+        for (const resolve of now) resolve(refuse ? { deny: 'away' } : { value: undefined })
+        await new Promise(r => setTimeout(r, 5))
+      }
+    }
+    let blits = 0
+    on('ui.blit', async () => {
+      blits++
+      return { value: {} }
+    })
+
+    const before = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
+    await tick(3)
+    expect(blits).toBeGreaterThan(0)
+    // Away: a refused period ends the interval.
+    refuse = true
+    await tick(1)
+    refuse = false
+    await before.unmount()
+
+    // Back: the band draws again, and must animate again.
+    blits = 0
+    const after = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
+    await tick(3)
+    expect(blits).toBeGreaterThan(0)
+    await after.unmount()
+  })
+
+  test('asks for a fresh render once its blits keep being denied', async ($, on) => {
+    mock.store(on)
+    on('agent.list', async () => ({ value: [] }))
+    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
+    const clock = mock.clock(on)
+    let deny = false
+    on('ui.blit', async () => ({ value: deny ? { deny: 'not mounted' } : {} }))
+    let invalidates = 0
+    on('ui.invalidate', async ($$, e, next) => {
+      invalidates++
+      return next(e)
+    })
+
+    const band = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
+    await clock.advance(500)
+    deny = true
+    invalidates = 0
+    await clock.advance(5000)
+    expect(invalidates).toBeGreaterThan(0)
+    await band.unmount()
+  })
+
   test('a tiny band is left alone', async ($, on) => {
     on('agent.list', async () => ({ value: [] }))
     on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
@@ -202,28 +279,58 @@ describe('the band', () => {
     await ui.unmount()
   })
 
-  test('every new turn starts a different scene', async ($, on) => {
+  test('each session keeps one scene, different from the session before', async ($, on) => {
     mock.store(on)
+    let sessionId = 's1'
+    on('session.id', async () => ({ value: sessionId }))
     on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
     on('turn.complete', async () => ({ text: '' }))
+    on('agent.list', async () => ({ value: [] }))
+    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
     const shown = async () => {
       const text = JSON.stringify(await $.command.run({ command: 'critters', args: '' }))
       return /last shown ([A-Za-z ]+)\./.exec(text)?.[1]
     }
-    const seen: (string | undefined)[] = []
-    on('agent.list', async () => ({ value: [] }))
-    on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
-    for (const turnId of ['t1', 't2', 't3']) {
-      // The band redraws as working before turn.start arrives, as in a session.
-      const band = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
-      await band.unmount()
-      await $.turn.start({ text: 'do work', turnId })
-      seen.push(await shown())
-      await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId } as never)
+    const turns = async (ids: string[]) => {
+      const seen: (string | undefined)[] = []
+      for (const turnId of ids) {
+        // The band redraws as working before turn.start arrives, as in a session.
+        const band = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })
+        await band.unmount()
+        await $.turn.start({ text: 'do work', turnId })
+        seen.push(await shown())
+        await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId } as never)
+      }
+      return seen
     }
-    expect(seen.every(Boolean)).toBe(true)
-    expect(seen[1]).not.toBe(seen[0])
-    expect(seen[2]).not.toBe(seen[1])
+
+    const first = await turns(['t1', 't2', 't3'])
+    expect(first[0]).toBeDefined()
+    expect(new Set(first).size).toBe(1)
+
+    // A /clear goes on under a new session id: a new session, another scene.
+    sessionId = 's2'
+    const second = await turns(['t4', 't5'])
+    expect(second[0]).toBeDefined()
+    expect(new Set(second).size).toBe(1)
+    expect(second[0]).not.toBe(first[0])
+
+    // Back to the first session (a resume): its scene again.
+    sessionId = 's1'
+    expect((await turns(['t6']))[0]).toBe(first[0])
+  })
+
+  test('/critters next gives this session another scene, and it stays', async ($, on) => {
+    mock.store(on)
+    on('session.id', async () => ({ value: 's1' }))
+    on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+    const before = JSON.stringify(await $.command.run({ command: 'critters', args: 'list' }))
+    const next = JSON.stringify(await $.command.run({ command: 'critters', args: 'next' }))
+    const name = /Now showing ([A-Za-z ]+)\./.exec(next)?.[1]
+    expect(name).toBeDefined()
+    expect(before).not.toContain(`this session: ${name}`)
+    await $.turn.start({ text: 'do work', turnId: 't1' })
+    expect(JSON.stringify(await $.command.run({ command: 'critters', args: '' }))).toContain(`last shown ${name}.`)
   })
 
   test('/critters answers list, scene and unknown names', async ($, on) => {
