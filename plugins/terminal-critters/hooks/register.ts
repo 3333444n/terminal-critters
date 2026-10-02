@@ -106,9 +106,10 @@ function ensureTimer($: Engine): void {
       if (++show.idle > IDLE_FRAMES) stopTimer()
       return
     }
-    // The main loop is idle but agents may still run: re-count now and then,
-    // and redraw once the last one (and any preview) is done so the band goes away.
-    if (!show.working && ++show.frames % AGENT_POLL_FRAMES === 0) {
+    // Re-count running agents about once a second, so a finished agent's
+    // helper leaves; with the main loop idle, redraw once the last one (and
+    // any preview) is done so the band goes away.
+    if (++show.frames % AGENT_POLL_FRAMES === 0) {
       void countAgents($).then(n => {
         if (n === 0 && !show.working && !previewing()) {
           show.band = undefined
@@ -161,6 +162,9 @@ export const register: Register = on => {
     if (!e.agentId) {
       show.turnOpen = false
       show.working = false
+    } else {
+      // An agent finished its turn: its helper can leave right away.
+      void countAgents($)
     }
     return next(e)
   })
@@ -170,14 +174,18 @@ export const register: Register = on => {
     // While the main loop is idle, the critter narrates what the agents do.
     const narrate = !e.agentId || !show.working
     show.director?.happen(kindOf(e.tool), labelOf(e as unknown as Record<string, unknown>), now(), e.agentId, narrate)
-    // An agent working while the band is hidden: draw it again.
-    if (e.agentId && !show.band && !show.paused) $.ui.invalidate('ui.render')
+    if (e.agentId) {
+      // A new agent gets its helper right away instead of at the next count.
+      void countAgents($)
+      // An agent working while the band is hidden: draw it again.
+      if (!show.band && !show.paused) $.ui.invalidate('ui.render')
+    }
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     show.working = e.props.isWorking
-    if (!show.working) await countAgents($)
+    await countAgents($)
     const visible = (busy() && !show.paused) || previewing()
     if (!visible || e.props.hasSurvey || e.surface !== 'terminal' || e.props.maxRows < MIN_ROWS + 1) {
       show.band = undefined

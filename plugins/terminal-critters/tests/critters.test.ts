@@ -84,7 +84,30 @@ describe('director', () => {
     expect(helperPixels(9)).toBe(helperPixels(5))
   })
 
-  test('a subagent call adds a helper and is not narrated', async () => {
+  test('a helper leaves as soon as its agent is no longer running', async () => {
+    const d = new Director(SCENES[0]!, 0)
+    const helpers = () => {
+      const c = d.canvas(160, 8, 1000)
+      let n = 0
+      for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (c.get(x, y) === 0xd97757) n++
+      return n
+    }
+    d.setBusyAgents(0)
+    const alone = helpers()
+    // An agent's tool calls alone no longer keep a helper around.
+    d.happen('bash', 'npm test', 500, 'agent-1')
+    expect(helpers()).toBe(alone)
+    d.setBusyAgents(3)
+    const three = helpers()
+    d.setBusyAgents(1)
+    const one = helpers()
+    expect(three).toBeGreaterThan(one)
+    expect(one).toBeGreaterThan(alone)
+    d.setBusyAgents(0)
+    expect(helpers()).toBe(alone)
+  })
+
+  test('a subagent call is not narrated while the main loop works', async () => {
     const d = new Director(SCENES[0]!, 0)
     const before = d.saying()
     d.happen('bash', 'helper-cmd', 10, 'agent-7')
@@ -119,6 +142,7 @@ describe('work labels', () => {
 
 describe('the band', () => {
   test('draws the scene while Claude works, on the terminal', async ($, on) => {
+    on('agent.list', async () => ({ value: [] }))
     // Stands in for what Claude Code draws beneath the mod.
     on('ui.render', { component: 'AbovePrompt' }, async ($$, e) => $$.ui.resolve(e).Box({ children: [] }))
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: bandProps(true) })

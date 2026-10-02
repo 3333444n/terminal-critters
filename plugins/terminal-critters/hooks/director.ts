@@ -12,8 +12,6 @@ import { pace, type Happening, type Scene, type SceneFrame, type WorkKind } from
 const HOLD_MS = 2600
 /** Quiet this long and the critter starts musing. */
 const MUSE_MS = 7000
-/** A subagent counts as busy this long after its last tool call. */
-const HELPER_MS = 25000
 
 /** At most this many helper critters, however many agents are busy. */
 export const MAX_HELPERS = 5
@@ -32,7 +30,6 @@ export class Director {
   private seen: Seen[] = []
   private said: Said
   private pending: Seen | undefined
-  private helpers = new Map<string, number>()
   private busyAgents = 0
   private counter = 0
 
@@ -58,10 +55,9 @@ export class Director {
    * are narrated only with `narrate` (when the main loop is idle).
    */
   happen(kind: WorkKind, label: string, now: number, agentId?: string, narrate = !agentId): void {
-    if (agentId) this.helpers.set(agentId, now)
     const seen: Seen = { kind, label, at: now, seed: this.counter++ }
     this.seen = [seen, ...this.seen].slice(0, 6)
-    // A subagent's calls make helpers busy; the main loop's are narrated.
+    // The main loop's calls are narrated; an agent's only when asked.
     if (!narrate) return
     if (now - this.said.at >= HOLD_MS || this.said.kind === 'think') this.say(seen, now)
     else this.pending = seen
@@ -83,7 +79,6 @@ export class Director {
     if (now - last >= MUSE_MS && now - this.said.at >= MUSE_MS) {
       this.said = { text: lineFor(this.scene, 'think', '', this.counter++), at: now, kind: 'think' }
     }
-    for (const [id, at] of this.helpers) if (now - at > HELPER_MS) this.helpers.delete(id)
   }
 
   /** Draws one frame and packs it for a Raster. */
@@ -101,7 +96,8 @@ export class Director {
       happenings: this.seen.map(
         (s): Happening => ({ kind: s.kind, label: s.label, age: (now - s.at) / 1000, seed: s.seed }),
       ),
-      helpers: Math.max(this.helpers.size, this.busyAgents),
+      // One helper per agent Claude Code lists as running: it leaves when its agent does.
+      helpers: this.busyAgents,
     }
     this.scene.draw(c, f)
     const pose = this.scene.pose?.(c, f) ?? pace(c, f, c.h - CRITTER_HEIGHT - 1)
