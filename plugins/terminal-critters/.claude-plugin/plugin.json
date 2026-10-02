@@ -1,0 +1,8 @@
+{
+  "name": "terminal-critters",
+  "version": "0.1.0",
+  "description": "A pixel critter and its little worlds, animated above the prompt while Claude works",
+  "author": { "name": "3333444n" },
+  "license": "MIT",
+  "keywords": ["mod", "spinner", "animation", "pixel-art", "fun"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "terminal-critters",
+  "description": "Pixel critters that keep you company in Claude Code while it works",
+  "owner": {
+    "name": "3333444n"
+  },
+  "plugins": [
+    {
+      "name": "terminal-critters",
+      "source": "./plugins/terminal-critters",
+      "description": "A pixel critter and its little worlds, animated above the prompt while Claude works"
+    }
+  ]
+}
